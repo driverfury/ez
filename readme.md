@@ -1,4 +1,4 @@
-# Ez
+# ez
 
 Easy-to-use general purpose C library written in ANSI C89.
 
