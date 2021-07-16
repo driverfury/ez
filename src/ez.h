@@ -1,6 +1,10 @@
 #ifndef EZ_H
 #define EZ_H
 
+#ifndef EZ_SCOPE
+#define EZ_SCOPE extern
+#endif
+
 /******************************************************************************/
 /**                                  TYPES                                   **/
 /******************************************************************************/
@@ -31,34 +35,37 @@ void ez_abort(void);
 /**                                  MEMORY                                  **/
 /******************************************************************************/
 
-void  ez_mem_copy(void *src, void *dest, size_t bytes);
-void *ez_mem_alloc(size_t size);
-void  ez_mem_free(void *ptr);
-void *ez_mem_realloc(void *ptr, size_t size);
+EZ_SCOPE void  ez_mem_copy(void *src, void *dest, size_t bytes);
+EZ_SCOPE void *ez_mem_alloc(size_t size);
+EZ_SCOPE void  ez_mem_free(void *ptr);
+EZ_SCOPE void *ez_mem_realloc(void *ptr, size_t size);
 
 /******************************************************************************/
 /**                                 STRINGS                                  **/
 /******************************************************************************/
 
-size_t ez_str_len(char *s);
-size_t ez_str_len_max(char *s, size_t max);
-void   ez_str_copy(char *src, char *dest);
-void   ez_str_copy_max(char *src, char *dest, size_t max);
+EZ_SCOPE size_t ez_str_len(char *s);
+EZ_SCOPE size_t ez_str_len_max(char *s, size_t max);
+EZ_SCOPE void   ez_str_copy(char *src, char *dest);
+EZ_SCOPE void   ez_str_copy_max(char *src, char *dest, size_t max);
 
 /******************************************************************************/
 /**                              STD I/O & ERR                               **/
 /******************************************************************************/
 
-void ez_out_print(char *s);
-void ez_out_println(char *s);
+EZ_SCOPE void ez_out_print(char *s);
+EZ_SCOPE void ez_out_println(char *s);
 
 /******************************************************************************/
 /**                                 FILE I/O                                 **/
 /******************************************************************************/
 
-char  *ez_file_read_text(char *pathname, size_t *size);
-void  *ez_file_read_bin(char *pathname, size_t *size);
-void   ez_file_free(void *file_content);
+EZ_SCOPE int    ez_file_exists(char *pathname);
+EZ_SCOPE char  *ez_file_read_text(char *pathname, size_t *size);
+EZ_SCOPE void  *ez_file_read_bin(char *pathname, size_t *size);
+EZ_SCOPE void   ez_file_free(void *file_content);
+EZ_SCOPE int    ez_file_write(char *pathname, void *content, size_t size);
+EZ_SCOPE int    ez_file_append(char *pathname, void *content, size_t size);
 
 #define ez_file_read ez_file_read_text
 
@@ -79,8 +86,16 @@ void   ez_file_free(void *file_content);
 #elif defined(WIN32) || defined(_WIN32) ||\
       defined(__WIN32__) || defined(__NT__)
 
-/* Linker stuff to not complaining about not using C runtime library */
+/*
+ * Stuff to make MSVC linker not complaining about the absence of
+ * the C runtime library
+ **/
 int _fltused = 0;
+
+/*
+ * The only library we need is kernel32.dll (or static kernel32.lib)
+ */
+#pragma comment(lib, "kernel32.lib")
 
 #include <windows.h>
 
@@ -227,10 +242,29 @@ ez_out_println(char *s)
     ez_out_print("\n");
 }
 
+
+int
+ez_file_exists(char *pathname)
+{
+    int exists = 0;
+    HANDLE file_handle;
+
+    file_handle = CreateFileA(
+        pathname, FILE_GENERIC_READ, FILE_SHARE_READ,
+        0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if(file_handle != INVALID_HANDLE_VALUE)
+    {
+        exists = 1;
+        CloseHandle(file_handle);
+    }
+
+    return(exists);
+}
+
+/* TODO: What if size == NULL? */
 char *
 ez_file_read_text(char *pathname, size_t *size)
 {
-    /* TODO */
     char *content = 0;
     char *content_ptr = 0;
     HANDLE file_handle;
@@ -242,8 +276,8 @@ ez_file_read_text(char *pathname, size_t *size)
     *size = 0;
 
     file_handle = CreateFileA(
-        pathname, GENERIC_READ, 0, 0, OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL, 0);
+        pathname, FILE_GENERIC_READ, FILE_SHARE_READ,
+        0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     if(file_handle == INVALID_HANDLE_VALUE)
     {
         return(content);
@@ -263,7 +297,6 @@ ez_file_read_text(char *pathname, size_t *size)
             {
                 if(bytes_to_read <= UINT32_MAX)
                 {
-                    /* TODO: */
                     to_read = (uint32_t)bytes_to_read;
                 }
                 else
@@ -305,6 +338,110 @@ void
 ez_file_free(void *file_content)
 {
     ez_mem_free(file_content);
+}
+
+int
+ez_file_write(char *pathname, void *content, size_t size)
+{
+    int result = 0;
+    HANDLE file_handle;
+    uint32_t bytes_to_write;
+    uint32_t bytes_written;
+    int error_occurred;
+
+    file_handle = CreateFileA(
+        pathname, FILE_WRITE_DATA, FILE_SHARE_READ,
+        0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    if(file_handle == INVALID_HANDLE_VALUE)
+    {
+        return(result);
+    }
+
+    error_occurred = 0;
+    do
+    {
+        if(size >= UINT32_MAX)
+        {
+            bytes_to_write = UINT32_MAX;
+        }
+        else
+        {
+            bytes_to_write = (uint32_t)size;
+        }
+        if(WriteFile(
+            file_handle, content,
+            bytes_to_write, (LPDWORD)&bytes_written, 0))
+        {
+            size -= bytes_written;
+        }
+        else
+        {
+            error_occurred = 1;
+        }
+    } while((size > 0) && !(error_occurred));
+
+    result = !error_occurred;
+
+    CloseHandle(file_handle);
+
+    return(result);
+}
+
+int
+ez_file_append(char *pathname, void *content, size_t size)
+{
+    int result = 0;
+    HANDLE file_handle;
+    uint32_t bytes_to_write;
+    uint32_t bytes_written;
+    int error_occurred;
+    uint8_t *content_ptr;
+
+    if(ez_file_exists(pathname))
+    {
+        file_handle = CreateFileA(
+            pathname, FILE_APPEND_DATA, FILE_SHARE_READ,
+            0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+        if(file_handle == INVALID_HANDLE_VALUE)
+        {
+            return(result);
+        }
+
+        error_occurred = 0;
+        content_ptr = (uint8_t *)content;
+        do
+        {
+            if(size >= UINT32_MAX)
+            {
+                bytes_to_write = UINT32_MAX;
+            }
+            else
+            {
+                bytes_to_write = (uint32_t)size;
+            }
+            if(WriteFile(
+                file_handle, content_ptr,
+                bytes_to_write, (LPDWORD)&bytes_written, 0))
+            {
+                size -= bytes_written;
+                content_ptr += bytes_written;
+            }
+            else
+            {
+                error_occurred = 1;
+            }
+        } while((size > 0) && !(error_occurred));
+
+        result = !error_occurred;
+
+        CloseHandle(file_handle);
+    }
+    else
+    {
+        result = ez_file_write(pathname, content, size);
+    }
+
+    return(result);
 }
 
 #else
