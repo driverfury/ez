@@ -1,6 +1,6 @@
 # ez
 
-Easy-to-use general purpose C library written in ANSI C89.
+Easy-to-use general purpose C library written in ANSI C99.
 
 ## Quick Start
 
