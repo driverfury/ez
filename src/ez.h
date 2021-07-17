@@ -185,6 +185,10 @@ ez_mem_realloc(void *ptr, size_t size)
             ez_mem_copy(ptr, newptr, min_size);
         }
     }
+    else
+    {
+        newptr = ez_mem_alloc(size);
+    }
     return(newptr);
 }
 
