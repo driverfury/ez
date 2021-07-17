@@ -19,6 +19,8 @@
 #define ez_min(x, y) (((x)<(y))?(x):(y))
 #define ez_max(x, y) (((x)>(y))?(x):(y))
 
+#define ez_array_count(a) ((sizeof(a))/(sizeof(a[0])))
+
 #ifndef NDEBUG
 #define ez_assert(cond)\
     if(!(cond))\
@@ -44,10 +46,16 @@ EZ_SCOPE void *ez_mem_realloc(void *ptr, size_t size);
 /**                                 STRINGS                                  **/
 /******************************************************************************/
 
+#define ez_char_is_digit(c) ((c) >= '0' && (c) <= '9')
+#define ez_char_is_alpha(c) \
+    (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
+#define ez_char_is_alphanum(c) (ez_char_is_alpha(c) || ez_char_is_digit(c))
+
 EZ_SCOPE size_t ez_str_len(char *s);
 EZ_SCOPE size_t ez_str_len_max(char *s, size_t max);
 EZ_SCOPE void   ez_str_copy(char *src, char *dest);
 EZ_SCOPE void   ez_str_copy_max(char *src, char *dest, size_t max);
+EZ_SCOPE int    ez_str_decimal(char *s);
 
 /******************************************************************************/
 /**                              STD I/O & ERR                               **/
@@ -87,6 +95,7 @@ EZ_SCOPE int    ez_file_append(char *pathname, void *content, size_t size);
       defined(__WIN32__) || defined(__NT__)
 
 /*
+ * TODO: Should we put this here or not? Let the user solve these problems?
  * Stuff to make MSVC linker not complaining about the absence of
  * the C runtime library
  **/
@@ -217,7 +226,35 @@ ez_str_copy_max(char *src, char *dest, size_t max)
     while(*src && i < max)
     {
         *dest++ = *src++;
+        ++i;
     }
+}
+
+int
+ez_str_decimal(char *s)
+{
+    int value = 0;
+    int sign = 1;
+
+    if(*s == '-')
+    {
+        sign = -1;
+        ++s;
+    }
+    else if(*s == '+')
+    {
+        sign = 1;
+        ++s;
+    }
+
+    while(ez_char_is_digit(*s))
+    {
+        int curr = (*s++ - '0');
+        value *= 10;
+        value += curr;
+    }
+
+    return(value*sign);
 }
 
 HANDLE *_ez_stdout;
