@@ -47,9 +47,31 @@ EZ_SCOPE void *ez_mem_realloc(void *ptr, size_t size);
 /******************************************************************************/
 
 #define ez_char_is_digit(c) ((c) >= '0' && (c) <= '9')
+#define ez_char_is_xdigit(c)\
+    (ez_char_is_digit(c) ||\
+     ((c) >= 'A' && (c) <= 'F') ||\
+     ((c) >= 'a' && (c) <= 'f'))
 #define ez_char_is_alpha(c) \
     (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
 #define ez_char_is_alphanum(c) (ez_char_is_alpha(c) || ez_char_is_digit(c))
+#define ez_char_is_alnum(c) ez_char_is_alphanum(c)
+#define ez_char_is_control(c) (((c) >= 0 && (c) <= 31) || (c) == 127)
+#define ez_char_is_cntrl(c) ez_char_is_control(c)
+#define ez_char_is_lower(c) ((c) >= 'a' && (c) <= 'z')
+#define ez_char_is_upper(c) ((c) >= 'A' && (c) <= 'Z')
+#define ez_char_is_print(c) ((c) >= 32 && (c) <= 126)
+#define ez_char_is_punct(c)\
+    (((c) >= 33  && (c) <= 47) ||\
+     ((c) >= 58  && (c) <= 64) ||\
+     ((c) >= 91  && (c) <= 96) ||\
+     ((c) >= 123 && (c) <= 126))
+#define ez_char_is_space(c)\
+    ((c) ==  ' ' || (c) == '\t' || (c) == '\v' ||\
+     (c) == '\n' || (c) == '\r' || (c) == '\f')
+#define ez_char_is_graph(c) (ez_char_is_alphanum(c) || ez_char_is_punct(c))
+
+#define ez_char_to_lower(c) ((ez_char_is_upper(c)) ? ((c) + 32) : (c))
+#define ez_char_to_upper(c) ((ez_char_is_lower(c)) ? ((c) - 32) : (c))
 
 EZ_SCOPE size_t ez_str_len(char *s);
 EZ_SCOPE size_t ez_str_len_max(char *s, size_t max);
@@ -69,6 +91,7 @@ EZ_SCOPE void ez_out_println(char *s);
 /******************************************************************************/
 
 EZ_SCOPE int    ez_file_exists(char *pathname);
+EZ_SCOPE size_t ez_file_size(char *pathname);
 EZ_SCOPE char  *ez_file_read_text(char *pathname, size_t *size);
 EZ_SCOPE void  *ez_file_read_bin(char *pathname, size_t *size);
 EZ_SCOPE void   ez_file_free(void *file_content);
@@ -182,7 +205,10 @@ ez_mem_realloc(void *ptr, size_t size)
             newptr = ez_mem_alloc(size);
             oldhdr = ez_get_allochdr(ptr);
             min_size = ez_min(size, oldhdr->size);
-            ez_mem_copy(ptr, newptr, min_size);
+            if(ptr != newptr)
+            {
+                ez_mem_copy(ptr, newptr, min_size);
+            }
         }
     }
     else
@@ -300,6 +326,41 @@ ez_file_exists(char *pathname)
     }
 
     return(exists);
+}
+
+size_t
+ez_file_size(char *pathname)
+{
+    HANDLE file_handle = 0;
+    size_t file_size = 0;
+
+    LARGE_INTEGER li;
+
+    file_handle = CreateFileA(
+        pathname, FILE_GENERIC_READ, FILE_SHARE_READ,
+        0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    if(file_handle != INVALID_HANDLE_VALUE)
+    {
+        file_size = 0;
+    }
+    else
+    {
+        if(!GetFileSizeEx(file_handle, &li))
+        {
+            file_size = 0;
+        }
+        else
+        {
+            file_size = (size_t)li.QuadPart;
+        }
+    }
+
+    if(file_handle != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(file_handle);
+    }
+
+    return(file_size);
 }
 
 /* TODO: What if size == NULL? */
